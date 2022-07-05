@@ -1,5 +1,8 @@
+import { Chart, registerables } from 'chart.js';
 import React, { useEffect, useState } from 'react';
 import './App.css';
+
+Chart.register(...registerables);
 
 const fetchApi = (/* url */) => {
   return window.Promise.resolve([
@@ -8,7 +11,7 @@ const fetchApi = (/* url */) => {
       title: 'rub',
     },
     {
-      value: 72 - Math.floor(Math.random() * 10),
+      value: 60 - Math.floor(Math.random() * 10),
       title: 'usd'
     }
   ]);
@@ -24,31 +27,29 @@ class App2 extends React.Component {
       rubAmount: 0,
     }
 
-    this.interval = undefined;
+    this.timeout = undefined;
 
     this.fetchApi = fetchApi;
   }
 
   componentDidMount() {
     this.loadData();
-
-    this.interval = setInterval(this.loadData, 5 * 1000);
   }
 
   componentDidUpdate(oldProps, oldState) {
     if (oldState.rubAmount !== this.state.rubAmount) {
-      // Something is happening here
+      console.log('[AMOUNT_CHANGE] Interface input change: %s', this.state.rubAmount);
     }
   }
 
   componentWillUnmount() {
-    clearInterval(this.interval);
+    window.clearTimeout(this.timeout);
   }
 
   loadData = () => {
     setTimeout(() => {
       this.fetchApi()
-        .then(data => {
+        .then((data) => {
           console.log('Data is loaded at ' + new Date());
           const usd = data.find(c => c.title === 'usd');
 
@@ -56,6 +57,8 @@ class App2 extends React.Component {
             usd: usd.value,
             loading: false,
           });
+
+          this.timeout = window.setTimeout(this.loadData, 5 * 1000);
         })
     }, 1000);
   }
@@ -102,29 +105,14 @@ class App2 extends React.Component {
   }
 }
 
-const App = () => {
+let chart;
+
+export const App = () => {
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState();
   const [rubAmount, setRubAmount] = useState(0);
   const [usd, setUsd] = useState(0);
   let timeout;
-
-  useEffect(() => {
-    loadData();
-  }, []); // componentDidMount
-
-  useEffect(() => {
-    if (!loading)
-      timeout = setTimeout(loadData, 5 * 1000);
-
-    return () => {
-      clearTimeout(timeout); // componentWillUnmount
-    }
-  }, [updated]);
-
-  useEffect(() => {
-    console.log(rubAmount);
-  }, [rubAmount]); // componentDidUpdate
 
   const loadData = () => {
     setTimeout(() => {
@@ -140,24 +128,65 @@ const App = () => {
     }, 1000);
   }
 
-  const calcUSD = () => {
-    if (loading) {
-      return 0;
+  useEffect(loadData, []); // componentDidMount
+
+  useEffect(() => {
+    if (!loading) {
+      timeout = window.setTimeout(loadData, 5 * 1000);
+
+      if (!chart) {
+
+        const canvasEl = document.getElementById('canvasId').getContext('2d');
+
+        chart = new Chart(canvasEl, {
+          type: 'bar',
+          data: {
+              labels: ['User', 'User-200'],
+              datasets: [{
+                  data: [10, 10],
+                  backgroundColor: [
+                      'rgba(255, 99, 132, 0.2)',
+                      'rgba(54, 162, 235, 0.2)',
+                  ],
+                  borderColor: [
+                      'rgba(255, 99, 132, 1)',
+                      'rgba(54, 162, 235, 1)',
+                  ],
+                  borderWidth: 1
+              }]
+          },
+        })
+
+      }
+
     }
 
-    return (rubAmount / usd).toFixed(2);
-  }
+    return () => {
+      window.clearTimeout(timeout); // componentWillUnmount
+    }
+  }, [updated]); // componentDidUpdate
+
+  useEffect(() => {
+    
+    if (chart) {
+
+      chart.data.datasets[0].data=[
+        rubAmount,
+        rubAmount - 200,
+      ];
+
+      chart.update();
+    }
+
+  }, [rubAmount]); // componentDidUpdate
+
+  const calcUSD = () => loading ? 0 : (rubAmount / usd).toFixed(2);
 
   const onChangeHandler = (event) => {
-    const { value } = event.target;
-
-    setRubAmount(Number(value));
+    setRubAmount(Number(event.target.value));
   }
 
-
-  if (loading) return <div>Loading...</div>
-
-  return (
+  return loading ? (<div>Loading...</div>) : (
     <div>
       <div>
         <input
@@ -173,6 +202,7 @@ const App = () => {
       <div>
         {calcUSD()} (1 usd = {usd} rub)
       </div>
+      <canvas id="canvasId" width="400" height="400" />
     </div>
   )
 }
